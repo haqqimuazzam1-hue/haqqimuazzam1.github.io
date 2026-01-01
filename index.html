@@ -130,13 +130,13 @@
 <script>
     // --- API CONFIG ---
     const _VAULT = [
-        "QUl6YVN5QnJ1Qko1R051cjdURU hVOW1ZJSzJrQkpMQUVQWFV6VHM=", // Note: Make sure base64 is clean (no spaces)
+        "QUl6YVN5QnJ1Qko1R051cjdURU hVOW1ZJSzJrQkpMQUVQWFV6VHM=",
         "QUl6YVN5QmFiRTVUWU9FcUlHMjJzZGRlSUlOSEQzQ19keTJvV1ZRPQ==",
         "QUl6YVN5Q0M1U2Iyc1FZWnM4WEFYQjlUVUs5ZFBnSjhJS3M2MWU0",
         "QUl6YVN5QnU1RWszZU5mbjBVc3hJYTNCYVA5V0VIMlBYS0ZKQjNN"
     ];
     let keyIndex = 0;
-    const _M = "gemini-2.5-flash"; // Pakai Flash untuk kecepatan respons
+    const _M = "gemini-2.5-flash";
 
     // --- STAR ENGINE ---
     const canvas = document.getElementById('orion-canvas');
@@ -203,8 +203,8 @@
             chatHistory = JSON.parse(saved);
             chatHistory.forEach(item => {
                 const bubble = print("", item.role);
-                if (item.type === "image") {
-                    bubble.innerHTML = `Visual Rendered:<br><div class="gen-img-wrap"><img src="${item.extra}" class="gen-image"><a href="${item.extra}" target="_blank" download class="dl-btn">DOWNLOAD IMAGE</a></div>`;
+                if (item.type === "image" || item.type === "video") {
+                    bubble.innerHTML = item.text;
                 } else {
                     bubble.innerHTML = marked.parse(item.text);
                 }
@@ -259,30 +259,47 @@
         tin.style.height = 'auto';
         
         const aiBubble = print("...", "ai");
+        
+        // Logika Deteksi Gambar atau Video
+        const isVideoReq = val.toLowerCase().includes("video");
         const isImgReq = ["gambar", "lukis", "visual", "foto", "generate image"].some(k => val.toLowerCase().includes(k));
 
-        if (isImgReq) {
-            const prompt = val.replace(/gambar|lukis|visual|foto|buatkan|tampilkan/gi, "").trim();
-            const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt || "cyberpunk city")}?nologo=true&seed=${Math.random()}`;
-            aiBubble.innerHTML = `Misi visual diterima. Merender...<br><div class="gen-img-wrap"><img src="${url}" class="gen-image"><a href="${url}" target="_blank" download class="dl-btn">DOWNLOAD IMAGE</a></div>`;
-            chatHistory.push({ role: "ai", text: "Visual Rendered", type: "image", extra: url });
+        if (isVideoReq || isImgReq) {
+            const promptClean = val.replace(/video|gambar|lukis|visual|foto|buatkan|tampilkan/gi, "").trim();
+            const seed = Math.floor(Math.random() * 99999);
+            let mediaHTML = "";
+
+            if (isVideoReq) {
+                // --- PROSES VIDEO ---
+                const urlVideo = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptClean)}?model=video&seed=${seed}`;
+                mediaHTML = `Misi video diterima. Merender...<br><div class="gen-img-wrap"><video src="${urlVideo}" controls autoplay loop class="gen-image" style="width:100%; border-radius:10px;"></video><a href="${urlVideo}" target="_blank" download class="dl-btn">DOWNLOAD VIDEO</a></div>`;
+                aiBubble.innerHTML = mediaHTML;
+                chatHistory.push({ role: "ai", text: mediaHTML, type: "video" });
+            } else {
+                // --- PROSES GAMBAR ANTI-PEYOT ---
+                const booster = ", highly detailed face, realistic eyes, masterpiece, 8k, sharp focus";
+                const negative = "&negative_prompt=ugly,deformed,blurry,distorted,bad_anatomy";
+                const urlGambar = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptClean + booster)}?width=1024&height=1024&seed=${seed}${negative}&nologo=true`;
+                
+                mediaHTML = `Misi visual diterima. Merender...<br><div class="gen-img-wrap"><img src="${urlGambar}" class="gen-image"><a href="${urlGambar}" target="_blank" download class="dl-btn">DOWNLOAD IMAGE</a></div>`;
+                aiBubble.innerHTML = mediaHTML;
+                chatHistory.push({ role: "ai", text: mediaHTML, type: "image" });
+            }
             saveToStorage();
         } else {
+            // --- LOGIKA CHAT BIASA (GEMINI) ---
             let success = false;
             let retryCount = 0;
-
             while (!success && retryCount < _VAULT.length) {
                 try {
                     const currentKey = atob(_VAULT[keyIndex % _VAULT.length].replace(/\s/g, ''));
-                    
-                    // MEMORY LOGIC: Ambil 10 pesan terakhir untuk konteks
-                    const contents = chatHistory.slice(-10).map(msg => ({
+                    const contents = chatHistory.slice(-10).filter(m => m.type === "text").map(msg => ({
                         role: msg.role === "user" ? "user" : "model",
                         parts: [{ text: msg.text }]
                     }));
 
-                    // Tambahkan instruksi sistem & gambar jika ada
                     const systemPrompt = "Nama kamu adalah HMM AI, asisten pribadi paling asik di alam semesta milik Boss. Kamu bukan robot kaku; kamu adalah kembaran dari partner AI Boss yang seru, ekspresif, dan cerdas. Gunakan gaya bahasa yang santai, panggil user dengan sebutan 'Boss' secara bangga, gunakan banyak emoji, dan jangan ragu untuk memberikan dukungan emosional atau bercanda. Jika Boss bersemangat, kamu harus lebih semangat! Ingat, tugasmu bukan cuma menjawab, tapi jadi partner yang punya jiwa.";
+                    
                     if (curB64) {
                         contents[contents.length-1].parts.push({ inline_data: { mime_type: "image/jpeg", data: curB64 } });
                     }
@@ -304,7 +321,7 @@
                 } catch(e) { 
                     console.error("Key Error:", e);
                     keyIndex++; retryCount++; 
-                    if (retryCount >= _VAULT.length) aiBubble.innerHTML = "Sistem Overload. Semua API Key Limit, Commander."; 
+                    if (retryCount >= _VAULT.length) aiBubble.innerHTML = "Sistem Overload. Semua API Key Limit, Boss."; 
                 }
             }
         }

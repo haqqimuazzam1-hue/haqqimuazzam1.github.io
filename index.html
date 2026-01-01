@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>HMM AI | GEMINI 2.5</title>
+    <title>HMM AI - Asisten Pribadi Terpintar</title>
+    <meta name="description" content="HMM AI adalah asisten pribadi berbasis Gemini 2.5 Flash yang bisa bikin gambar anti-peyot, video animasi, dan punya ingatan permanen.">
+    <meta name="keywords" content="HMM AI, AI Terpintar, AI Indonesia, AI Video Generator, AI Image Generator">
+    <meta name="author" content="Haqqi Muazzam Mulhim">
     
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/tokyo-night-dark.min.css">
@@ -81,8 +84,8 @@
         .gen-image { width: 100%; border-radius: 15px; border: 1px solid var(--border); }
         .dl-btn {
             display: inline-flex; align-items: center; gap: 5px; background: var(--accent); color: #000;
-            padding: 8px 14px; border-radius: 8px; text-decoration: none; font-size: 11px; font-weight: bold;
-            margin-top: 8px;
+            padding: 8px 14px; border-radius: 8px; border: none; font-size: 11px; font-weight: bold;
+            margin-top: 8px; cursor: pointer;
         }
 
         @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -128,7 +131,7 @@
 </div>
 
 <script>
-    // --- API CONFIG ---
+    // --- API CONFIG & VAULT ---
     const _VAULT = [
         "QUl6YVN5QnJ1Qko1R051cjdURU hVOW1ZJSzJrQkpMQUVQWFV6VHM=",
         "QUl6YVN5QmFiRTVUWU9FcUlHMjJzZGRlSUlOSEQzQ19keTJvV1ZRPQ==",
@@ -154,18 +157,36 @@
     function anim() { ctx.clearRect(0,0,canvas.width,canvas.height); pts.forEach(p=>{p.update();p.draw();}); requestAnimationFrame(anim); }
     anim();
 
-    // --- CHAT ENGINE ---
-    let chatHistory = [];
+    // --- OTAK PERMANEN ---
+    let chatHistory = JSON.parse(localStorage.getItem('hmm_data')) || [];
+    let userName = localStorage.getItem('hmm_user_name') || "";
 
     function openModal() { document.getElementById('modal-overlay').style.display = 'flex'; }
     function closeModal() { document.getElementById('modal-overlay').style.display = 'none'; }
-    
-    function confirmWipe() { 
-        document.getElementById('chat-flow').innerHTML = ""; 
-        chatHistory = [];
-        localStorage.removeItem('hmm_data');
-        closeModal(); 
-        typeEffect("Chat telah dibersihkan.", print("", "ai")); 
+
+    // --- FITUR DIRECT DOWNLOAD (BLOB CONVERSION) ---
+    async function directDownload(url, filename) {
+        const btn = event.currentTarget;
+        const originalText = btn.innerText;
+        btn.innerText = "SABAR...";
+        try {
+            const response = await fetch(url);
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(blobUrl);
+            document.body.removeChild(a);
+            btn.innerText = "DONE!";
+        } catch (error) {
+            btn.innerText = "ERROR!";
+            window.open(url, '_blank');
+        } finally {
+            setTimeout(() => btn.innerText = originalText, 2000);
+        }
     }
 
     function print(txt, role) {
@@ -193,22 +214,17 @@
         }, 12);
     }
 
-    function saveToStorage() {
-        localStorage.setItem('hmm_data', JSON.stringify(chatHistory));
-    }
-
     window.onload = () => {
-        const saved = localStorage.getItem('hmm_data');
-        if (saved) {
-            chatHistory = JSON.parse(saved);
+        if (chatHistory.length > 0) {
             chatHistory.forEach(item => {
                 const bubble = print("", item.role);
                 bubble.innerHTML = (item.type === "image" || item.type === "video") ? item.text : marked.parse(item.text);
             });
-            hljs.highlightAll();
-            addCopyBtns();
+        }
+        if (!userName) {
+            typeEffect("Halo! Saya HMM AI. Siapa nama Boss?", print("", "ai"));
         } else {
-            typeEffect("Halo! HMM AI siap membantu. Mari buat sesuatu yang luar biasa.", print("", "ai"));
+            typeEffect(`Selamat datang kembali, Boss ${userName}!`, print("", "ai"));
         }
     };
 
@@ -216,7 +232,7 @@
     function handleImg(i) {
         if(i.files[0]) {
             const r = new FileReader();
-            r.onload = e => { b64 = e.target.result.split(',')[1]; alert("Visual siap dikirim!"); };
+            r.onload = e => { b64 = e.target.result.split(',')[1]; alert("Visual siap!"); };
             r.readAsDataURL(i.files[0]);
         }
     }
@@ -227,21 +243,6 @@
         r.onresult = e => { document.getElementById('t-in').value = e.results[0][0].transcript; };
     }
 
-    function addCopyBtns() {
-        document.querySelectorAll('pre').forEach(p => {
-            if (p.querySelector('.copy-tag')) return;
-            const b = document.createElement('button');
-            b.className = 'copy-tag'; b.innerText = 'COPY';
-            b.onclick = () => { 
-                const text = p.innerText.replace('COPY','').trim();
-                navigator.clipboard.writeText(text); 
-                b.innerText = 'DONE'; 
-                setTimeout(()=>b.innerText='COPY', 2000); 
-            };
-            p.appendChild(b);
-        });
-    }
-
     async function execute() {
         const tin = document.getElementById('t-in');
         const val = tin.value.trim();
@@ -249,67 +250,67 @@
 
         const curB64 = b64;
         print(marked.parse(val || "Visual Input"), "user");
-        chatHistory.push({ role: "user", text: val || "Visual Input", type: "text" });
-        tin.value = ""; b64 = "";
-        tin.style.height = 'auto';
-        
-        const aiBubble = print("...", "ai");
-        const lowerVal = val.toLowerCase();
+        tin.value = ""; b64 = ""; tin.style.height = 'auto';
 
-        // LOGIKA BARU: Render Video & Gambar Anti-Peyot
+        if (!userName && chatHistory.length === 0) {
+            userName = val;
+            localStorage.setItem('hmm_user_name', userName);
+            typeEffect(`Siap Boss ${userName}! Ada yang bisa dibantu?`, print("", "ai"));
+            return;
+        }
+
+        const aiBubble = print("...", "ai");
+        const lowerVal = (val || "").toLowerCase();
+
         if (lowerVal.includes("video") || ["gambar", "lukis", "visual", "foto"].some(k => lowerVal.includes(k))) {
             const isVideo = lowerVal.includes("video");
-            const promptAsli = val.replace(/video|gambar|lukis|visual|foto|buatkan|tampilkan/gi, "").trim();
             const seed = Math.floor(Math.random() * 999999);
-            
-            // Mantra Kualitas Tinggi
-            const booster = ", highly detailed, masterpiece, 8k, realistic, cinematic lighting";
-            const negative = "&negative_prompt=ugly, deformed, blurry, bad anatomy, distorted face";
-            
-            // Jika video, tambahkan instruksi motion
-            const finalPrompt = encodeURIComponent(promptAsli + booster + (isVideo ? ", dynamic motion, video animation" : ""));
-            
-            // Gunakan model flux/turbo yang lebih cepat untuk video animasi
-            const urlMedia = `https://image.pollinations.ai/prompt/${finalPrompt}?width=1024&height=1024&seed=${seed}&model=flux${negative}&nologo=true`;
+            const promptAsli = val.replace(/video|gambar|lukis|visual|foto|buatkan/gi, "").trim();
+            const booster = ", highly detailed, masterpiece, 8k" + (isVideo ? ", animation" : "");
+            const urlMedia = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptAsli + booster)}?width=1024&height=1024&seed=${seed}&model=flux&nologo=true`;
+            const fileName = `HMM_AI_${seed}.${isVideo ? 'mp4' : 'jpg'}`;
 
-            let resHTML = "";
-            if (isVideo) {
-                resHTML = `Misi video diterima, Boss! Lagi ngerender versi kilat nih...<br><div class="gen-img-wrap"><img src="${urlMedia}" class="gen-image" style="width:100%; border-radius:10px;"><a href="${urlMedia}" target="_blank" download class="dl-btn">DOWNLOAD VIDEO</a></div>`;
-            } else {
-                resHTML = `Visual meluncur, Boss!<br><div class="gen-img-wrap"><img src="${urlMedia}" class="gen-image"><a href="${urlMedia}" target="_blank" download class="dl-btn">DOWNLOAD IMAGE</a></div>`;
-            }
+            let resHTML = `Beres Boss ${userName}!<br><div class="gen-img-wrap"><img src="${urlMedia}" class="gen-image"><button class="dl-btn" onclick="directDownload('${urlMedia}', '${fileName}')">DOWNLOAD ${isVideo ? 'VIDEO' : 'IMAGE'}</button></div>`;
 
             aiBubble.innerHTML = resHTML;
             chatHistory.push({ role: "ai", text: resHTML, type: isVideo ? "video" : "image" });
-            saveToStorage();
-        } 
-        else {
-            // --- LOGIKA CHAT BIASA (GEMINI) ---
+            localStorage.setItem('hmm_data', JSON.stringify(chatHistory));
+        } else {
+            chatHistory.push({ role: "user", text: val, type: "text" });
             let success = false; let retryCount = 0;
             while (!success && retryCount < _VAULT.length) {
                 try {
                     const currentKey = atob(_VAULT[keyIndex % _VAULT.length].replace(/\s/g, ''));
-                    const contents = chatHistory.slice(-10).filter(m => m.type === "text").map(msg => ({
+                    const contents = chatHistory.slice(-10).map(msg => ({
                         role: msg.role === "user" ? "user" : "model",
                         parts: [{ text: msg.text }]
                     }));
-                    const systemPrompt = "Nama kamu adalah HMM AI, asisten pribadi paling asik di alam semesta milik Boss. Panggil user dengan 'Boss', gunakan emoji, gaya bahasa santai dan cerdas.";
                     if (curB64) contents[contents.length-1].parts.push({ inline_data: { mime_type: "image/jpeg", data: curB64 } });
 
+                    const systemPrompt = `Nama kamu HMM AI. Asisten Boss ${userName}. Santai & cerdas.`;
                     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${_M}:generateContent?key=${currentKey}`, {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ contents: contents, systemInstruction: { parts: [{ text: systemPrompt }] } })
+                        method: 'POST', headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ contents, systemInstruction: { parts: [{ text: systemPrompt }] } })
                     });
                     const data = await res.json();
                     const reply = data.candidates[0].content.parts[0].text;
                     typeEffect(reply, aiBubble);
                     chatHistory.push({ role: "ai", text: reply, type: "text" });
-                    saveToStorage();
+                    localStorage.setItem('hmm_data', JSON.stringify(chatHistory));
                     success = true;
                 } catch(e) { keyIndex++; retryCount++; }
             }
         }
+    }
+
+    function confirmWipe() { localStorage.clear(); location.reload(); }
+    function addCopyBtns() {
+        document.querySelectorAll('pre').forEach(p => {
+            if (p.querySelector('.copy-tag')) return;
+            const b = document.createElement('button'); b.className = 'copy-tag'; b.innerText = 'COPY';
+            b.onclick = () => { navigator.clipboard.writeText(p.innerText.replace('COPY','').trim()); b.innerText = 'DONE'; setTimeout(()=>b.innerText='COPY', 2000); };
+            p.appendChild(b);
+        });
     }
 </script>
 </body>

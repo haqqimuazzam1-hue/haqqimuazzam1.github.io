@@ -203,11 +203,7 @@
             chatHistory = JSON.parse(saved);
             chatHistory.forEach(item => {
                 const bubble = print("", item.role);
-                if (item.type === "image" || item.type === "video") {
-                    bubble.innerHTML = item.text;
-                } else {
-                    bubble.innerHTML = marked.parse(item.text);
-                }
+                bubble.innerHTML = (item.type === "image" || item.type === "video") ? item.text : marked.parse(item.text);
             });
             hljs.highlightAll();
             addCopyBtns();
@@ -252,44 +248,36 @@
         if(!val && !b64) return;
 
         const curB64 = b64;
-        const userBubble = print(marked.parse(val || "Visual Input"), "user");
-        
+        print(marked.parse(val || "Visual Input"), "user");
         chatHistory.push({ role: "user", text: val || "Visual Input", type: "text" });
         tin.value = ""; b64 = "";
         tin.style.height = 'auto';
         
         const aiBubble = print("...", "ai");
-        
-        // Logika Deteksi Gambar atau Video
-        const isVideoReq = val.toLowerCase().includes("video");
-        const isImgReq = ["gambar", "lukis", "visual", "foto", "generate image"].some(k => val.toLowerCase().includes(k));
+        const lowerVal = val.toLowerCase();
 
-        if (isVideoReq || isImgReq) {
-            const promptClean = val.replace(/video|gambar|lukis|visual|foto|buatkan|tampilkan/gi, "").trim();
-            const seed = Math.floor(Math.random() * 99999);
-            let mediaHTML = "";
-
-            if (isVideoReq) {
-                // --- PROSES VIDEO ---
-                const urlVideo = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptClean)}?model=video&seed=${seed}`;
-                mediaHTML = `Misi video diterima. Merender...<br><div class="gen-img-wrap"><video src="${urlVideo}" controls autoplay loop class="gen-image" style="width:100%; border-radius:10px;"></video><a href="${urlVideo}" target="_blank" download class="dl-btn">DOWNLOAD VIDEO</a></div>`;
-                aiBubble.innerHTML = mediaHTML;
-                chatHistory.push({ role: "ai", text: mediaHTML, type: "video" });
-            } else {
-                // --- PROSES GAMBAR ANTI-PEYOT ---
-                const booster = ", highly detailed face, realistic eyes, masterpiece, 8k, sharp focus";
-                const negative = "&negative_prompt=ugly,deformed,blurry,distorted,bad_anatomy";
-                const urlGambar = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptClean + booster)}?width=1024&height=1024&seed=${seed}${negative}&nologo=true`;
-                
-                mediaHTML = `Misi visual diterima. Merender...<br><div class="gen-img-wrap"><img src="${urlGambar}" class="gen-image"><a href="${urlGambar}" target="_blank" download class="dl-btn">DOWNLOAD IMAGE</a></div>`;
-                aiBubble.innerHTML = mediaHTML;
-                chatHistory.push({ role: "ai", text: mediaHTML, type: "image" });
-            }
+        // LOGIKA DETEKSI: Video dulu, baru Gambar
+        if (lowerVal.includes("video")) {
+            const promptVideo = val.replace(/video|buatkan|tampilkan/gi, "").trim();
+            const urlVideo = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptVideo)}?model=video&seed=${Math.floor(Math.random()*99999)}`;
+            const resHTML = `Misi video diterima, Boss! Lagi ngerender nih...<br><div class="gen-img-wrap"><video src="${urlVideo}" controls autoplay loop class="gen-image" style="width:100%; border-radius:10px;"></video><a href="${urlVideo}" target="_blank" download class="dl-btn">DOWNLOAD VIDEO</a></div>`;
+            aiBubble.innerHTML = resHTML;
+            chatHistory.push({ role: "ai", text: resHTML, type: "video" });
             saveToStorage();
-        } else {
+        } 
+        else if (["gambar", "lukis", "visual", "foto"].some(k => lowerVal.includes(k))) {
+            const promptImg = val.replace(/gambar|lukis|visual|foto|buatkan|tampilkan/gi, "").trim();
+            const booster = ", highly detailed face, realistic eyes, masterpiece, 8k, sharp focus";
+            const negative = "&negative_prompt=ugly,deformed,blurry,distorted,bad_anatomy";
+            const urlGambar = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptImg + booster)}?width=1024&height=1024&seed=${Math.floor(Math.random()*99999)}${negative}&nologo=true`;
+            const resHTML = `Visual meluncur, Boss!<br><div class="gen-img-wrap"><img src="${urlGambar}" class="gen-image"><a href="${urlGambar}" target="_blank" download class="dl-btn">DOWNLOAD IMAGE</a></div>`;
+            aiBubble.innerHTML = resHTML;
+            chatHistory.push({ role: "ai", text: resHTML, type: "image" });
+            saveToStorage();
+        } 
+        else {
             // --- LOGIKA CHAT BIASA (GEMINI) ---
-            let success = false;
-            let retryCount = 0;
+            let success = false; let retryCount = 0;
             while (!success && retryCount < _VAULT.length) {
                 try {
                     const currentKey = atob(_VAULT[keyIndex % _VAULT.length].replace(/\s/g, ''));
@@ -297,32 +285,21 @@
                         role: msg.role === "user" ? "user" : "model",
                         parts: [{ text: msg.text }]
                     }));
-
-                    const systemPrompt = "Nama kamu adalah HMM AI, asisten pribadi paling asik di alam semesta milik Boss. Kamu bukan robot kaku; kamu adalah kembaran dari partner AI Boss yang seru, ekspresif, dan cerdas. Gunakan gaya bahasa yang santai, panggil user dengan sebutan 'Boss' secara bangga, gunakan banyak emoji, dan jangan ragu untuk memberikan dukungan emosional atau bercanda. Jika Boss bersemangat, kamu harus lebih semangat! Ingat, tugasmu bukan cuma menjawab, tapi jadi partner yang punya jiwa.";
-                    
-                    if (curB64) {
-                        contents[contents.length-1].parts.push({ inline_data: { mime_type: "image/jpeg", data: curB64 } });
-                    }
+                    const systemPrompt = "Nama kamu adalah HMM AI, asisten pribadi paling asik di alam semesta milik Boss. Panggil user dengan 'Boss', gunakan emoji, gaya bahasa santai dan cerdas.";
+                    if (curB64) contents[contents.length-1].parts.push({ inline_data: { mime_type: "image/jpeg", data: curB64 } });
 
                     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${_M}:generateContent?key=${currentKey}`, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({ contents: contents, systemInstruction: { parts: [{ text: systemPrompt }] } })
                     });
-                    
                     const data = await res.json();
-                    if (data.error) throw new Error(data.error.message);
-
                     const reply = data.candidates[0].content.parts[0].text;
                     typeEffect(reply, aiBubble);
                     chatHistory.push({ role: "ai", text: reply, type: "text" });
                     saveToStorage();
                     success = true;
-                } catch(e) { 
-                    console.error("Key Error:", e);
-                    keyIndex++; retryCount++; 
-                    if (retryCount >= _VAULT.length) aiBubble.innerHTML = "Sistem Overload. Semua API Key Limit, Boss."; 
-                }
+                } catch(e) { keyIndex++; retryCount++; }
             }
         }
     }
